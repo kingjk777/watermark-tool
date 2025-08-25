@@ -1,0 +1,503 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>대량 워터마크 도구 v3 (ZIP 수정)</title>
+    <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fortawesome/fontawesome-free@6.4.0/css/all.min.css">
+    <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
+</head>
+<body class="bg-gradient-to-br from-blue-50 to-indigo-100 min-h-screen">
+    <div class="container mx-auto px-4 py-8 max-w-6xl">
+        <div class="bg-white rounded-2xl shadow-xl p-8">
+            <div class="text-center mb-8">
+                <h1 class="text-4xl font-bold text-gray-800 mb-2">
+                    <i class="fas fa-image text-blue-500"></i> 대량 워터마크 처리 도구
+                </h1>
+                <p class="text-gray-600">여러 이미지에 파일명 워터마크를 한 번에 추가하고 ZIP으로 다운로드</p>
+            </div>
+
+            <!-- 파일 업로드 영역 -->
+            <div class="mb-8">
+                <div id="dropZone" class="border-2 border-dashed border-blue-300 rounded-xl p-12 text-center bg-blue-50 hover:bg-blue-100 transition-all cursor-pointer">
+                    <i class="fas fa-cloud-upload-alt text-6xl text-blue-400 mb-4"></i>
+                    <h3 class="text-xl font-semibold text-gray-700 mb-2">이미지를 드래그하거나 클릭하여 업로드</h3>
+                    <p class="text-gray-500 mb-4">JPG, PNG, WebP, GIF 지원 (여러 파일 선택 가능)</p>
+                    <input type="file" id="fileInput" multiple accept="image/*" class="hidden">
+                    <button onclick="document.getElementById('fileInput').click()" class="bg-blue-500 hover:bg-blue-600 text-white px-6 py-3 rounded-lg font-medium transition-colors">
+                        <i class="fas fa-folder-open mr-2"></i>파일 선택
+                    </button>
+                </div>
+            </div>
+
+            <!-- 컨트롤 패널 -->
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+                <div class="bg-gray-50 rounded-xl p-6">
+                    <h4 class="font-semibold text-gray-700 mb-4">
+                        <i class="fas fa-text-height text-purple-500 mr-2"></i>워터마크 크기
+                    </h4>
+                    <input type="range" id="sizeSlider" min="20" max="120" value="40" class="w-full h-2 bg-purple-200 rounded-lg slider">
+                    <div class="text-center mt-2">
+                        <span id="sizeValue" class="text-lg font-medium text-purple-600">40px</span>
+                    </div>
+                </div>
+
+                <div class="bg-gray-50 rounded-xl p-6">
+                    <h4 class="font-semibold text-gray-700 mb-4">
+                        <i class="fas fa-eye text-green-500 mr-2"></i>투명도
+                    </h4>
+                    <input type="range" id="opacitySlider" min="10" max="100" value="70" class="w-full h-2 bg-green-200 rounded-lg slider">
+                    <div class="text-center mt-2">
+                        <span id="opacityValue" class="text-lg font-medium text-green-600">70%</span>
+                    </div>
+                </div>
+
+                <div class="bg-gray-50 rounded-xl p-6">
+                    <h4 class="font-semibold text-gray-700 mb-4">
+                        <i class="fas fa-palette text-orange-500 mr-2"></i>색상 모드
+                    </h4>
+                    <select id="colorMode" class="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-transparent">
+                        <option value="random">랜덤 색상</option>
+                        <option value="white">흰색</option>
+                        <option value="black">검은색</option>
+                        <option value="red">빨간색</option>
+                        <option value="blue">파란색</option>
+                    </select>
+                </div>
+            </div>
+
+            <!-- 미리보기 영역 -->
+            <div id="previewSection" class="hidden mb-8">
+                <h3 class="text-xl font-semibold text-gray-700 mb-4">
+                    <i class="fas fa-eye text-blue-500 mr-2"></i>미리보기
+                </h3>
+                <div class="bg-gray-100 rounded-xl p-4 text-center">
+                    <canvas id="previewCanvas" class="max-w-full h-auto border border-gray-300 rounded-lg shadow-md"></canvas>
+                </div>
+            </div>
+
+            <!-- 처리된 이미지 목록 -->
+            <div id="processedSection" class="hidden mb-8">
+                <h3 class="text-xl font-semibold text-gray-700 mb-4">
+                    <i class="fas fa-check-circle text-green-500 mr-2"></i>처리된 이미지
+                </h3>
+                <div id="processedList" class="grid grid-cols-2 md:grid-cols-4 gap-4"></div>
+            </div>
+
+            <!-- 진행률 -->
+            <div id="progressSection" class="hidden mb-8">
+                <h3 class="text-xl font-semibold text-gray-700 mb-4">
+                    <i class="fas fa-tasks text-blue-500 mr-2"></i>처리 진행률
+                </h3>
+                <div class="bg-gray-200 rounded-full h-4">
+                    <div id="progressBar" class="bg-blue-500 h-4 rounded-full transition-all duration-300" style="width: 0%"></div>
+                </div>
+                <div class="text-center mt-2">
+                    <span id="progressText" class="text-gray-600">0 / 0</span>
+                </div>
+            </div>
+
+            <!-- 액션 버튼들 -->
+            <div class="flex flex-wrap gap-4 justify-center">
+                <button id="processBtn" class="hidden bg-green-500 hover:bg-green-600 text-white px-8 py-3 rounded-lg font-medium transition-colors">
+                    <i class="fas fa-play mr-2"></i>모든 이미지 처리
+                </button>
+                <button id="downloadZipBtn" class="hidden bg-purple-500 hover:bg-purple-600 text-white px-8 py-3 rounded-lg font-medium transition-colors">
+                    <i class="fas fa-download mr-2"></i>ZIP으로 다운로드
+                </button>
+                <button id="clearBtn" class="hidden bg-red-500 hover:bg-red-600 text-white px-8 py-3 rounded-lg font-medium transition-colors">
+                    <i class="fas fa-trash mr-2"></i>모두 지우기
+                </button>
+            </div>
+
+            <!-- 상태 메시지 -->
+            <div id="statusMessage" class="mt-6 text-center hidden">
+                <div class="inline-flex items-center px-6 py-3 rounded-lg">
+                    <i id="statusIcon" class="mr-2"></i>
+                    <span id="statusText"></span>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let selectedFiles = [];
+        let processedImages = [];
+
+        // DOM 요소들
+        const dropZone = document.getElementById('dropZone');
+        const fileInput = document.getElementById('fileInput');
+        const sizeSlider = document.getElementById('sizeSlider');
+        const opacitySlider = document.getElementById('opacitySlider');
+        const colorMode = document.getElementById('colorMode');
+        const sizeValue = document.getElementById('sizeValue');
+        const opacityValue = document.getElementById('opacityValue');
+        const previewSection = document.getElementById('previewSection');
+        const previewCanvas = document.getElementById('previewCanvas');
+        const processedSection = document.getElementById('processedSection');
+        const processedList = document.getElementById('processedList');
+        const progressSection = document.getElementById('progressSection');
+        const progressBar = document.getElementById('progressBar');
+        const progressText = document.getElementById('progressText');
+        const processBtn = document.getElementById('processBtn');
+        const downloadZipBtn = document.getElementById('downloadZipBtn');
+        const clearBtn = document.getElementById('clearBtn');
+        const statusMessage = document.getElementById('statusMessage');
+        const statusIcon = document.getElementById('statusIcon');
+        const statusText = document.getElementById('statusText');
+
+        // 이벤트 리스너
+        dropZone.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            dropZone.classList.add('border-blue-500', 'bg-blue-100');
+        });
+
+        dropZone.addEventListener('dragleave', () => {
+            dropZone.classList.remove('border-blue-500', 'bg-blue-100');
+        });
+
+        dropZone.addEventListener('drop', (e) => {
+            e.preventDefault();
+            dropZone.classList.remove('border-blue-500', 'bg-blue-100');
+            handleFiles(e.dataTransfer.files);
+        });
+
+        fileInput.addEventListener('change', (e) => {
+            handleFiles(e.target.files);
+        });
+
+        sizeSlider.addEventListener('input', () => {
+            sizeValue.textContent = sizeSlider.value + 'px';
+            updatePreview();
+        });
+
+        opacitySlider.addEventListener('input', () => {
+            opacityValue.textContent = opacitySlider.value + '%';
+            updatePreview();
+        });
+
+        colorMode.addEventListener('change', updatePreview);
+
+        processBtn.addEventListener('click', processAllImages);
+        downloadZipBtn.addEventListener('click', downloadAsZip);
+        clearBtn.addEventListener('click', clearAll);
+
+        // 파일 처리
+        function handleFiles(files) {
+            selectedFiles = Array.from(files).filter(file => file.type.startsWith('image/'));
+            
+            if (selectedFiles.length === 0) {
+                showStatus('error', '이미지 파일을 선택해주세요.');
+                return;
+            }
+
+            showStatus('success', `${selectedFiles.length}개의 이미지가 선택되었습니다.`);
+            
+            // 첫 번째 이미지로 미리보기
+            if (selectedFiles.length > 0) {
+                loadImagePreview(selectedFiles[0]);
+            }
+
+            // 버튼들 표시
+            processBtn.classList.remove('hidden');
+            clearBtn.classList.remove('hidden');
+        }
+
+        // 미리보기 로드
+        function loadImagePreview(file) {
+            const reader = new FileReader();
+            reader.onload = (e) => {
+                const img = new Image();
+                img.onload = () => {
+                    previewSection.classList.remove('hidden');
+                    drawWatermark(img, getFilenameWithoutExtension(file.name), previewCanvas);
+                };
+                img.src = e.target.result;
+            };
+            reader.readAsDataURL(file);
+        }
+
+        // 미리보기 업데이트
+        function updatePreview() {
+            if (selectedFiles.length > 0) {
+                loadImagePreview(selectedFiles[0]);
+            }
+        }
+
+        // 워터마크 그리기
+        function drawWatermark(img, text, canvas) {
+            const ctx = canvas.getContext('2d');
+            
+            // 캔버스 크기 조정
+            const maxWidth = 800;
+            const maxHeight = 600;
+            let { width, height } = img;
+            
+            if (width > maxWidth || height > maxHeight) {
+                const ratio = Math.min(maxWidth / width, maxHeight / height);
+                width *= ratio;
+                height *= ratio;
+            }
+            
+            canvas.width = width;
+            canvas.height = height;
+            
+            // 이미지 그리기
+            ctx.drawImage(img, 0, 0, width, height);
+            
+            // 워터마크 설정
+            const fontSize = parseInt(sizeSlider.value);
+            const opacity = parseInt(opacitySlider.value) / 100;
+            const color = getWatermarkColor();
+            
+            ctx.font = `bold ${fontSize}px Arial`;
+            ctx.fillStyle = color;
+            ctx.globalAlpha = opacity;
+            ctx.textAlign = 'right';
+            ctx.textBaseline = 'bottom';
+            
+            // 그림자 효과
+            ctx.shadowColor = 'rgba(0, 0, 0, 0.5)';
+            ctx.shadowBlur = 4;
+            ctx.shadowOffsetX = 2;
+            ctx.shadowOffsetY = 2;
+            
+            // 워터마크 그리기 (우하단)
+            const padding = 20;
+            ctx.fillText(text, width - padding, height - padding);
+        }
+
+        // 파일명에서 확장자 제거
+        function getFilenameWithoutExtension(filename) {
+            return filename.replace(/\.[^/.]+$/, '');
+        }
+
+        // 워터마크 색상 가져오기
+        function getWatermarkColor() {
+            const mode = colorMode.value;
+            if (mode === 'random') {
+                const colors = ['#FF6B6B', '#4ECDC4', '#45B7D1', '#96CEB4', '#FFEAA7', '#DDA0DD', '#98D8C8', '#F7DC6F'];
+                return colors[Math.floor(Math.random() * colors.length)];
+            }
+            
+            const colorMap = {
+                'white': '#FFFFFF',
+                'black': '#000000',
+                'red': '#FF0000',
+                'blue': '#0000FF'
+            };
+            
+            return colorMap[mode] || '#FFFFFF';
+        }
+
+        // 모든 이미지 처리
+        async function processAllImages() {
+            if (selectedFiles.length === 0) return;
+
+            processBtn.disabled = true;
+            progressSection.classList.remove('hidden');
+            processedImages = [];
+            processedList.innerHTML = '';
+            processedSection.classList.remove('hidden');
+
+            for (let i = 0; i < selectedFiles.length; i++) {
+                const file = selectedFiles[i];
+                
+                // 진행률 업데이트
+                const progress = ((i + 1) / selectedFiles.length) * 100;
+                progressBar.style.width = progress + '%';
+                progressText.textContent = `${i + 1} / ${selectedFiles.length}`;
+
+                try {
+                    const processedBlob = await processImage(file);
+                    processedImages.push({
+                        name: file.name,
+                        blob: processedBlob
+                    });
+
+                    // 썸네일 추가
+                    addThumbnail(processedBlob, file.name);
+                } catch (error) {
+                    console.error('이미지 처리 오류:', error);
+                    showStatus('error', `${file.name} 처리 중 오류가 발생했습니다.`);
+                }
+            }
+
+            processBtn.disabled = false;
+            downloadZipBtn.classList.remove('hidden');
+            showStatus('success', `${processedImages.length}개의 이미지 처리 완료!`);
+        }
+
+        // 개별 이미지 처리
+        function processImage(file) {
+            return new Promise((resolve) => {
+                const reader = new FileReader();
+                reader.onload = (e) => {
+                    const img = new Image();
+                    img.onload = () => {
+                        const canvas = document.createElement('canvas');
+                        canvas.width = img.width;
+                        canvas.height = img.height;
+                        
+                        drawWatermark(img, getFilenameWithoutExtension(file.name), canvas);
+                        
+                        canvas.toBlob((blob) => {
+                            resolve(blob);
+                        }, 'image/png', 0.9);
+                    };
+                    img.src = e.target.result;
+                };
+                reader.readAsDataURL(file);
+            });
+        }
+
+        // 썸네일 추가
+        function addThumbnail(blob, filename) {
+            const url = URL.createObjectURL(blob);
+            const div = document.createElement('div');
+            div.className = 'bg-white rounded-lg p-3 shadow-md';
+            div.innerHTML = `
+                <img src="${url}" class="w-full h-24 object-cover rounded mb-2">
+                <p class="text-xs text-gray-600 truncate">${filename}</p>
+                <button onclick="downloadSingle('${url}', '${filename}')" 
+                        class="w-full mt-2 bg-blue-500 hover:bg-blue-600 text-white text-xs py-1 px-2 rounded">
+                    <i class="fas fa-download mr-1"></i>다운로드
+                </button>
+            `;
+            processedList.appendChild(div);
+        }
+
+        // 개별 다운로드
+        function downloadSingle(url, filename) {
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `watermarked_${filename}`;
+            a.click();
+        }
+
+        // ZIP 다운로드
+        async function downloadAsZip() {
+            if (processedImages.length === 0) return;
+
+            try {
+                downloadZipBtn.disabled = true;
+                showStatus('info', 'ZIP 파일을 생성하고 있습니다...');
+
+                const zip = new JSZip();
+
+                // 각 이미지를 ZIP에 추가
+                for (const item of processedImages) {
+                    const filename = `watermarked_${item.name}`;
+                    zip.file(filename, item.blob);
+                }
+
+                // ZIP 생성 및 다운로드
+                const zipBlob = await zip.generateAsync({
+                    type: 'blob',
+                    compression: 'DEFLATE',
+                    compressionOptions: { level: 6 }
+                });
+
+                // 다운로드
+                const url = URL.createObjectURL(zipBlob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = `watermarked_images_${new Date().getTime()}.zip`;
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+                URL.revokeObjectURL(url);
+
+                showStatus('success', 'ZIP 다운로드가 완료되었습니다!');
+            } catch (error) {
+                console.error('ZIP 생성 오류:', error);
+                showStatus('error', 'ZIP 생성 중 오류가 발생했습니다.');
+            } finally {
+                downloadZipBtn.disabled = false;
+            }
+        }
+
+        // 모두 지우기
+        function clearAll() {
+            selectedFiles = [];
+            processedImages = [];
+            processedList.innerHTML = '';
+            previewSection.classList.add('hidden');
+            processedSection.classList.add('hidden');
+            progressSection.classList.add('hidden');
+            processBtn.classList.add('hidden');
+            downloadZipBtn.classList.add('hidden');
+            clearBtn.classList.add('hidden');
+            fileInput.value = '';
+            showStatus('info', '모든 데이터가 지워졌습니다.');
+        }
+
+        // 상태 메시지 표시
+        function showStatus(type, message) {
+            const typeConfig = {
+                'success': { icon: 'fas fa-check-circle', class: 'text-green-600 bg-green-100' },
+                'error': { icon: 'fas fa-exclamation-circle', class: 'text-red-600 bg-red-100' },
+                'info': { icon: 'fas fa-info-circle', class: 'text-blue-600 bg-blue-100' }
+            };
+
+            const config = typeConfig[type];
+            statusIcon.className = config.icon;
+            statusText.textContent = message;
+            statusMessage.className = `mt-6 text-center ${config.class} rounded-lg`;
+            statusMessage.classList.remove('hidden');
+
+            // 3초 후 자동으로 숨김 (에러가 아닌 경우)
+            if (type !== 'error') {
+                setTimeout(() => {
+                    statusMessage.classList.add('hidden');
+                }, 3000);
+            }
+        }
+
+        // 초기화
+        document.addEventListener('DOMContentLoaded', () => {
+            showStatus('info', '이미지를 업로드하여 시작하세요!');
+        });
+    </script>
+
+    <style>
+        .slider {
+            -webkit-appearance: none;
+            appearance: none;
+            cursor: pointer;
+        }
+        
+        .slider::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            appearance: none;
+            height: 20px;
+            width: 20px;
+            border-radius: 50%;
+            background: #3B82F6;
+            cursor: pointer;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+        }
+        
+        .slider::-moz-range-thumb {
+            height: 20px;
+            width: 20px;
+            border-radius: 50%;
+            background: #3B82F6;
+            cursor: pointer;
+            border: none;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+        }
+    </style>
+<script defer src="https://static.cloudflareinsights.com/beacon.min.js/vcd15cbe7772f49c399c6a5babf22c1241717689176015" integrity="sha512-ZpsOmlRQV6y907TI0dKBHq9Md29nnaEIPlkf84rnaERnq6zvWvPUqr2ft8M1aS28oN72PdrCzSjY4U6VaAw1EQ==" data-cf-beacon='{"rayId":"9748903c1bdd29e1","serverTiming":{"name":{"cfExtPri":true,"cfEdge":true,"cfOrigin":true,"cfL4":true,"cfSpeedBrain":true,"cfCacheStatus":true}},"version":"2025.8.0","token":"4edd5f8ec12a48cfa682ab8261b80a79"}' crossorigin="anonymous"></script>
+</body>
+</html>
+    <script id="html_badge_script1">
+        window.__genspark_remove_badge_link = "https://www.genspark.ai/api/html_badge/" +
+            "remove_badge?token=To%2FBnjzloZ3UfQdcSaYfDieCrZWWgb9wmb8nxr1pc%2BbUM%2BeihTErZm6YAO8KjipprY%2F3H3RApm%2FtobJx3g8kXqDN9gQxlTfyfzv2kkLwk4KLAov4nel2rLRe192LIlU3l687xmb2U8dhgR2u%2BNeAOSrUGYUKYMieHXNkhuw6YdPBo6RWyAhwumKdS57CeOU%2FofUjUTXHgQRT7km5IIHvJ4JjJu0IZMlspQk3g9q0Jt7jxq7hGv78TceHvE1SHOEnIfpJ7OQG4%2FedtscX409Z%2FlJS9ZK%2B7euC9VohvCWMYTN6FJYUkmoj0mZag5%2F2mlrTypVV753T1a%2BrstlMh69LTvoFqr%2B38As4G6Xf7N2zteKywv805clYEPWg2jg6LVZw1yWbNkG%2FE3pu40fy4mwOv9vJEBqLwNFsP1wD1kfCpdsyAFPggiszJFnFvdlXAGh%2F9gqO5XRri3JJOGxWhuwGrSlp9apdPN6%2B7mi1P%2FAKmS2jMyHyVNZRCaqTD7Gv663QgwCDjSlk6IAt7u%2BCcJUuYg%3D%3D";
+        window.__genspark_locale = "ko-KR";
+        window.__genspark_token = "To/BnjzloZ3UfQdcSaYfDieCrZWWgb9wmb8nxr1pc+bUM+eihTErZm6YAO8KjipprY/3H3RApm/tobJx3g8kXqDN9gQxlTfyfzv2kkLwk4KLAov4nel2rLRe192LIlU3l687xmb2U8dhgR2u+NeAOSrUGYUKYMieHXNkhuw6YdPBo6RWyAhwumKdS57CeOU/ofUjUTXHgQRT7km5IIHvJ4JjJu0IZMlspQk3g9q0Jt7jxq7hGv78TceHvE1SHOEnIfpJ7OQG4/edtscX409Z/lJS9ZK+7euC9VohvCWMYTN6FJYUkmoj0mZag5/2mlrTypVV753T1a+rstlMh69LTvoFqr+38As4G6Xf7N2zteKywv805clYEPWg2jg6LVZw1yWbNkG/E3pu40fy4mwOv9vJEBqLwNFsP1wD1kfCpdsyAFPggiszJFnFvdlXAGh/9gqO5XRri3JJOGxWhuwGrSlp9apdPN6+7mi1P/AKmS2jMyHyVNZRCaqTD7Gv663QgwCDjSlk6IAt7u+CcJUuYg==";
+    </script>
+    
+    <script id="html_notice_dialog_script" src="https://www.genspark.ai/notice_dialog.js"></script>
+    
